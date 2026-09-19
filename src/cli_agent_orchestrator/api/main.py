@@ -165,11 +165,7 @@ from cli_agent_orchestrator.services.terminal_service import (
 from cli_agent_orchestrator.services.workflow_journal import (
     _TERMINAL_RUN_STATES as _JOURNAL_TERMINAL_RUN_STATES,
 )
-from cli_agent_orchestrator.services.workflow_journal import (
-    EventRow,
-    GapMarker,
-    StepRow,
-)
+from cli_agent_orchestrator.services.workflow_journal import EventRow, GapMarker, StepRow
 from cli_agent_orchestrator.services.worktree_service import WorktreeError
 from cli_agent_orchestrator.telemetry import init_telemetry, shutdown_telemetry
 from cli_agent_orchestrator.utils.agent_profiles import load_agent_profile, resolve_provider
@@ -388,6 +384,12 @@ def _validate_model_id(value: str) -> None:
         raise ValueError(f"model exceeds the {MODEL_ID_MAX_LEN}-char cap")
     if not re.fullmatch(MODEL_ID_RE, value):
         raise ValueError(f"model {value!r} is invalid (must match {MODEL_ID_RE!r})")
+
+
+class TerminalInputBody(BaseModel):
+    """Input text travels in JSON so large prompts stay out of request URLs."""
+
+    message: str = Field(description="Complete terminal input, without URL encoding")
 
 
 class UpdateGroupBody(BaseModel):
@@ -3552,11 +3554,25 @@ async def get_terminal_working_directory(terminal_id: TerminalId) -> WorkingDire
 async def send_terminal_input(
     request: Request,
     terminal_id: TerminalId,
-    message: str,
+    message: Optional[str] = None,
     sender_id: Optional[str] = None,
     orchestration_type: Optional[OrchestrationType] = None,
+    body: Optional[TerminalInputBody] = None,
     _scopes: List[str] = Depends(require_any_scope(SCOPE_WRITE, SCOPE_ADMIN)),
 ) -> Dict:
+    # Legacy query callers remain supported. Two sources are ambiguous even
+    # when their current values match; reject before any input is delivered.
+    if message is not None and body is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Specify message in either JSON body or query, not both",
+        )
+    if body is not None:
+        message = body.message
+    if message is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A message is required"
+        )
     try:
         # send_input is blocking tmux I/O (bracketed paste + key sends). Run it
         # off the event loop so a slow tmux call can't freeze every other
