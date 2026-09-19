@@ -343,7 +343,7 @@ def launch(
             request_timeout = get_server_settings()["mcp_request_timeout"]
             response = requests.post(
                 f"{API_BASE_URL}/terminals/{terminal['id']}/input",
-                params={"message": message},
+                json={"message": message},
                 timeout=request_timeout,
             )
             response.raise_for_status()
