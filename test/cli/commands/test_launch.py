@@ -1023,3 +1023,39 @@ def test_minimax_code_requires_workspace_access_confirmation():
     )
 
     assert "mcode" in PROVIDERS_REQUIRING_WORKSPACE_ACCESS
+
+
+def test_headless_initial_prompt_uses_single_json_input_after_readiness():
+    prompt = "Full source\n" + "λ & ? # qualification\n" * 5000
+    order = []
+    with (
+        patch("cli_agent_orchestrator.cli.commands.launch.requests.post") as post,
+        patch("cli_agent_orchestrator.cli.commands.launch.wait_until_terminal_status") as wait,
+        patch("cli_agent_orchestrator.cli.commands.launch.time.sleep"),
+    ):
+        post.return_value.json.return_value = {
+            "session_name": "cao-test",
+            "id": "abcd1234",
+            "name": "agent",
+        }
+        post.side_effect = lambda *a, **kw: (
+            order.append("input" if "/input" in a[0] else "create") or post.return_value
+        )
+        wait.side_effect = lambda *a, **kw: (order.append("ready") or True)
+        result = CliRunner().invoke(
+            launch,
+            [
+                "--agents",
+                "test-agent",
+                "--provider",
+                "claude_code",
+                "--headless",
+                "--async",
+                "--auto-approve",
+                prompt,
+            ],
+        )
+    assert result.exit_code == 0, result.output
+    assert order == ["create", "ready", "input"]
+    assert post.call_args_list[-1].kwargs["json"] == {"message": prompt}
+    assert "params" not in post.call_args_list[-1].kwargs
