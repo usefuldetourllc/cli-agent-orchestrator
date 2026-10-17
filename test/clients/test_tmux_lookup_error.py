@@ -1,12 +1,8 @@
 """Tests for the libtmux listing boundary in TmuxClient (no real tmux required).
 
-Covers the `libtmux.neo.parse_output` failure mode: libtmux >= 0.53.1 zips a fixed
-125-name format list against a row's values with ``strict=True``, so any row
-short of 125 values raises ``ValueError('zip() argument 2 is shorter than
-argument 1')`` instead of degrading. A pane/session vanishing mid-listing does
-exactly that, and it used to surface as a raw ValueError — indistinguishable
-from this module's own "session not found" ValueError, and fatal to launches
-and to the FIFO pipe-liveness watchdog.
+Current libtmux selects fields by command and tmux version and rejects
+malformed row widths. That failure remains distinct from a genuine missing
+session and must not become evidence of cleanup.
 """
 
 import inspect
@@ -64,16 +60,7 @@ def make_window(pane=None):
 
 
 class TestUpstreamParseOutput:
-    """Pin the real libtmux failure, when the installed libtmux has that path.
-
-    Gated on ``parse_output``'s own source rather than on a version number: the
-    strict zip landed in 0.53.1, the whole ``parse_output`` /
-    ``get_output_format`` pair does not exist before 0.53.1, and
-    ``get_output_format`` grew parameters after it. The pinned dependency range
-    resolves a non-strict libtmux, so this normally skips — the wrapper itself
-    is exercised against a simulated failure by every other test in this file.
-    It exists so raising the bound over a still-broken release fails loudly here.
-    """
+    """Exercise real strict row validation as well as mocked boundary errors."""
 
     def test_one_field_short_row_raises_value_error(self):
         neo = pytest.importorskip("libtmux.neo")
