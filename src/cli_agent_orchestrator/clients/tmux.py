@@ -33,14 +33,10 @@ _T = TypeVar("_T")
 class TmuxLookupError(RuntimeError):
     """A tmux listing could not be read, so the answer is UNKNOWN — not "absent".
 
-    libtmux >= 0.53.1 parses ``list-sessions`` / ``list-windows`` / ``list-panes``
-    output with ``dict(zip(formats, values, strict=True))`` (``libtmux/neo.py``,
-    ``parse_output``) against a fixed 125-name format list, stripping only ONE
-    trailing empty field. Any row that yields fewer than 125 values — a
-    session/window/pane that disappears mid-listing, or a trailing field this
-    tmux build simply omits — raises ``ValueError('zip() argument 2 is shorter
-    than argument 1')`` instead of degrading. Under load (many concurrent CAO
-    sessions polling the same tmux server) that race fires constantly.
+    Current libtmux (0.62+) selects fields by listing command and tmux
+    version, then validates the row width with a strict zip. A malformed or
+    interrupted listing can still raise ValueError. Older releases used a
+    fixed field list, but that is not a reason to retain their dependency pin.
 
     This exception exists so the failure cannot masquerade as a missing session.
     Everything else in this module signals a *genuine* absence with a plain
